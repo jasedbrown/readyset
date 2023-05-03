@@ -78,6 +78,9 @@ pub enum Dialect {
     /// Identifiers are escaped with backticks (`\``) or square brackets (`[` and `]`) and strings
     /// use either single quotes (`'`) or double quotes (`"`)
     MySQL,
+
+    /// The not-at-all SQL dialect for MongoDB.
+    MongoDB,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Error)]
@@ -91,6 +94,7 @@ impl FromStr for Dialect {
         match s.to_lowercase().as_str() {
             "mysql" => Ok(Dialect::MySQL),
             "postgresql" => Ok(Dialect::PostgreSQL),
+            "mongodb" => Ok(Dialect::MongoDB),
             _ => Err(UnknownDialect(s.to_owned())),
         }
     }
@@ -137,6 +141,7 @@ impl Dialect {
                     |v: LocatedSpan<&[u8]>| str::from_utf8(&v).map(Into::into),
                 ),
             ))(i),
+            Dialect::MongoDB => panic!("not supported yet"),
         }
     }
 
@@ -158,6 +163,7 @@ impl Dialect {
                 )),
                 |i| str::from_utf8(&i),
             )(i),
+            Dialect::MongoDB => panic!("not supported yet"),
         }
     }
 
@@ -166,6 +172,7 @@ impl Dialect {
         match self {
             Dialect::PostgreSQL => QuotingStyle::Single,
             Dialect::MySQL => QuotingStyle::SingleOrDouble,
+            Dialect::MongoDB => QuotingStyle::Double,
         }
     }
 
@@ -174,6 +181,7 @@ impl Dialect {
         match self {
             Self::PostgreSQL => '"',
             Self::MySQL => '`',
+            Self::MongoDB => '"',
         }
     }
 
@@ -197,6 +205,7 @@ impl Dialect {
                 opt(alt((tag("_utf8mb4"), tag("_utf8"), tag("_binary")))),
                 raw_string_literal(self.quoting_style()),
             )(i),
+            Dialect::MongoDB => panic!("not supported yet"),
         }
     }
 
@@ -211,6 +220,7 @@ impl Dialect {
         move |i| match self {
             Dialect::PostgreSQL => raw_hex_bytes_psql(i),
             Dialect::MySQL => raw_hex_bytes_mysql(i),
+            Dialect::MongoDB => panic!("not supported"),
         }
     }
 
@@ -219,6 +229,10 @@ impl Dialect {
         move |input| match self {
             Dialect::PostgreSQL => raw_bit_vector_psql(input),
             Dialect::MySQL => Err(nom::Err::Error(NomSqlError {
+                input,
+                kind: nom::error::ErrorKind::Many0,
+            })),
+            Dialect::MongoDB => Err(nom::Err::Error(NomSqlError {
                 input,
                 kind: nom::error::ErrorKind::Many0,
             })),

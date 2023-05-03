@@ -822,6 +822,7 @@ pub fn field_reference(
                 ),
                 map(expression(dialect), FieldReference::Expr),
             ))(i),
+            Dialect::MongoDB => panic!("not supported"),
         }
     }
 }

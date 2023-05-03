@@ -130,6 +130,7 @@ pub enum DatabaseType {
     MySql,
     Psql,
     ReadySet,
+    MongoDB,
 }
 
 impl From<DatabaseType> for SharedString {
@@ -138,6 +139,7 @@ impl From<DatabaseType> for SharedString {
             DatabaseType::MySql => SharedString::const_str("mysql"),
             DatabaseType::Psql => SharedString::const_str("psql"),
             DatabaseType::ReadySet => SharedString::const_str("readyset"),
+            DatabaseType::MongoDB => SharedString::const_str("mongodb"),
         }
     }
 }

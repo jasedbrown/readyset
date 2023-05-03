@@ -98,6 +98,7 @@ pub fn commit(d: Dialect) -> impl Fn(LocatedSpan<&[u8]>) -> NomSqlResult<&[u8], 
                     ))),
                 )),
             ))(i)?,
+            Dialect::MongoDB => panic!("not supported"),
         };
 
         Ok((remaining_input, CommitStatement))

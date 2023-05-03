@@ -190,6 +190,7 @@ impl TestScript {
         admin_url.set_db_name(match url.database_type() {
             DatabaseType::PostgreSQL => "postgres".to_owned(),
             DatabaseType::MySQL => "mysql".to_owned(),
+            DatabaseType::MongoDB => "mongodb".to_owned(),
         });
         let mut admin_conn = admin_url
             .connect(None)
@@ -556,10 +557,12 @@ impl TestScript {
                 match database_type {
                     DatabaseType::MySQL => readyset_data::Dialect::DEFAULT_MYSQL,
                     DatabaseType::PostgreSQL => readyset_data::Dialect::DEFAULT_POSTGRESQL,
+                    DatabaseType::MongoDB => readyset_data::Dialect::DEFAULT_MONGODB,
                 },
                 match database_type {
                     DatabaseType::MySQL => nom_sql::Dialect::MySQL,
                     DatabaseType::PostgreSQL => nom_sql::Dialect::PostgreSQL,
+                    DatabaseType::MongoDB => nom_sql::Dialect::MongoDB,
                 },
                 Default::default(),
                 server_supports_pagination,
@@ -614,6 +617,8 @@ impl TestScript {
                     )
                     .await
                 }
+                // TODO(jeb): this seems to be like what i want to spawn, a "mongo backend"
+                DatabaseType::MongoDB => panic!("not implemented"),
             }
         });
 
@@ -628,6 +633,7 @@ impl TestScript {
                     config.dbname("noria");
                     config.into()
                 }
+                DatabaseType::MongoDB => panic!("not supported"),
             },
         )
     }

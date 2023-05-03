@@ -795,6 +795,10 @@ impl DeploymentBuilder {
 
                     drop(handle);
                 }
+
+                DatabaseType::MongoDB => {
+                    panic!("not supported yet :)");
+                }
             }
 
             let user = self.user.clone().unwrap_or_else(|| "root".to_string());

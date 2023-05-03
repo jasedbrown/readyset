@@ -147,6 +147,9 @@ pub enum DatabaseType {
 
     #[value(name = "postgresql")]
     PostgreSQL,
+
+    #[value(name = "mongodb")]
+    MongoDB,
 }
 
 /// Parses the strings `"mysql"` and `"postgresql"`, case-insensitively
@@ -195,6 +198,7 @@ impl Display for DatabaseType {
         match self {
             DatabaseType::MySQL => f.write_str("mysql"),
             DatabaseType::PostgreSQL => f.write_str("postgresql"),
+            DatabaseType::MongoDB => f.write_str("mongodb"),
         }
     }
 }

@@ -1,6 +1,7 @@
 #![deny(macro_use_extern_crate)]
 #![feature(let_chains)]
 
+pub mod mongodb;
 pub mod mysql;
 pub mod psql;
 mod query_logger;
@@ -629,6 +630,7 @@ where
             let database_label = match self.database_type {
                 DatabaseType::MySQL => readyset_client_metrics::DatabaseType::MySql,
                 DatabaseType::PostgreSQL => readyset_client_metrics::DatabaseType::Psql,
+                DatabaseType::MongoDB => readyset_client_metrics::DatabaseType::MongoDB,
             };
 
             let recorder = PrometheusBuilder::new()

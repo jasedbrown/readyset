@@ -261,6 +261,7 @@ impl BuiltinFunction {
                     },
                     DfType::Json,
                 ),
+                SqlEngine::MongoDB => unsupported!("not yet supported"),
             },
             "jsonb_object" => (
                 Self::JsonObject {
@@ -289,6 +290,7 @@ impl BuiltinFunction {
                 },
                 DfType::Jsonb,
             ),
+
             "json_extract_path_text" | "jsonb_extract_path_text" => (
                 Self::JsonExtractPath {
                     json: next_arg()?,
@@ -399,6 +401,7 @@ impl BuiltinFunction {
                         let compare_as = mysql_least_greatest_compare_as(arg_tys);
                         (compare_as, return_ty)
                     }
+                    SqlEngine::MongoDB => unsupported!("not supported")
                 };
 
                 let mut args = Vec1::with_capacity(arg1, rest_args.len() + 1);

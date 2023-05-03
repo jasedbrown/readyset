@@ -1,12 +1,12 @@
 version: "3.8"
 services:
-  mysql:
-    image: mysql
-    environment:
-      - MYSQL_ROOT_PASSWORD=readyset
-      - MYSQL_DATABASE=testdb
-    ports:
-      - '3306:3306'
+  # mysql:
+  #   image: mysql
+  #   environment:
+  #     - MYSQL_ROOT_PASSWORD=readyset
+  #     - MYSQL_DATABASE=testdb
+  #   ports:
+  #     - '3306:3306'
   postgres:
     image: postgres:14
     environment:
@@ -18,3 +18,10 @@ services:
       - "postgres"
       - "-c"
       - "wal_level=logical"
+  # mongo:
+  #   image: mongo
+  #   environment:
+  #     MONGO_INITDB_ROOT_USERNAME: root
+  #     MONGO_INITDB_ROOT_PASSWORD: example
+  #   ports:
+  #     - '27017:27017'

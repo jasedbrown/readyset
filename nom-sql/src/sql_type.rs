@@ -777,6 +777,10 @@ fn other_type(dialect: Dialect) -> impl Fn(LocatedSpan<&[u8]>) -> NomSqlResult<&
             i,
             ErrorKind::IsNot,
         ))),
+        Dialect::MongoDB => Err(nom::Err::Error(ParseError::from_error_kind(
+            i,
+            ErrorKind::IsNot,
+        ))),
     }
 }
 

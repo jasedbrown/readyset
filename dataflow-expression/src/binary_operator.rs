@@ -164,9 +164,11 @@ impl BinaryOperator {
             Arrow1 => match dialect.engine() {
                 SqlEngine::MySQL => Ok((Self::JsonPathExtract, false)),
                 SqlEngine::PostgreSQL => Ok((Self::JsonKeyExtract, false)),
+                SqlEngine::MongoDB => panic!("not supported"),
             },
             Arrow2 => match dialect.engine() {
                 SqlEngine::MySQL => Ok((Self::JsonPathExtractUnquote, false)),
+                SqlEngine::MongoDB => panic!("not supported"),
                 SqlEngine::PostgreSQL => Ok((Self::JsonKeyExtractText, false)),
             },
             HashArrow1 | HashArrow2 if dialect.engine() != SqlEngine::PostgreSQL => {

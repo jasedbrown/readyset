@@ -8,6 +8,7 @@ use crate::DfType;
 pub enum SqlEngine {
     PostgreSQL,
     MySQL,
+    MongoDB,
 }
 
 impl fmt::Display for SqlEngine {
@@ -16,6 +17,7 @@ impl fmt::Display for SqlEngine {
         f.write_str(match self {
             Self::MySQL => "MySQL",
             Self::PostgreSQL => "PostgreSQL",
+            Self::MongoDB => "MongoDB",
         })
     }
 }
@@ -45,6 +47,12 @@ impl Dialect {
         engine: SqlEngine::MySQL,
     };
 
+    /// The [`Dialect`] corresponding to the expression evaluation semantics of a
+    /// default-configured MongoDB database.
+    pub const DEFAULT_MONGODB: Dialect = Dialect {
+        engine: SqlEngine::MongoDB,
+    };
+
     /// Return an enum corresponding to the underlying SQL engine for this dialect.
     ///
     /// This function should ideally be used quite sparingly, instead opting to encode
@@ -68,6 +76,8 @@ impl Dialect {
             // https://www.postgresql.org/docs/current/datatype-datetime.html
             // "By default, there is no explicit bound on precision", so the max value is used.
             SqlEngine::PostgreSQL => 6,
+
+            SqlEngine::MongoDB => 0,
         }
     }
 
@@ -81,6 +91,7 @@ impl Dialect {
         match self.engine {
             SqlEngine::MySQL => false,
             SqlEngine::PostgreSQL => true,
+            SqlEngine::MongoDB => false,
         }
     }
 
@@ -89,6 +100,7 @@ impl Dialect {
         match self.engine {
             SqlEngine::MySQL => DfType::Float,
             SqlEngine::PostgreSQL => DfType::Double,
+            SqlEngine::MongoDB => DfType::Double,
         }
     }
 
@@ -98,6 +110,7 @@ impl Dialect {
         match self.engine {
             SqlEngine::PostgreSQL => DfType::Double,
             SqlEngine::MySQL => DfType::Float,
+            SqlEngine::MongoDB => DfType::Double,
         }
     }
 
@@ -106,6 +119,7 @@ impl Dialect {
         match self.engine {
             SqlEngine::MySQL => DfType::UnsignedBigInt,
             SqlEngine::PostgreSQL => DfType::Int,
+            SqlEngine::MongoDB => DfType::UnsignedBigInt,
         }
     }
 }

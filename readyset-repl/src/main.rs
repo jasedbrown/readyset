@@ -14,7 +14,7 @@ use rustyline_derive::{Completer, Helper, Highlighter, Hinter};
 struct Options {
     /// URL of the database to connect to.
     ///
-    /// Should be a URL starting with either `mysql://` or `postgresql://`
+    /// Should be a URL starting with either `mysql://` or `postgresql://` or `mongodb://`
     database_url: DatabaseURL,
 }
 
@@ -134,6 +134,7 @@ impl ReplContext {
             match self.options.database_url.database_type() {
                 DatabaseType::MySQL => "mysql",
                 DatabaseType::PostgreSQL => "postgresql",
+                DatabaseType::MongoDB => "mongodb",
             }
         );
         if let Some(user) = self.options.database_url.user() {

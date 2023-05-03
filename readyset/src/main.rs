@@ -2,6 +2,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use clap::Parser;
 use database_utils::DatabaseType;
+use readyset::mongodb::MongoDbHandler;
 use readyset::mysql::MySqlHandler;
 use readyset::psql::PsqlHandler;
 use readyset::{NoriaAdapter, Options};
@@ -31,6 +32,17 @@ fn main() -> anyhow::Result<()> {
             database_type: DatabaseType::PostgreSQL,
             parse_dialect: nom_sql::Dialect::PostgreSQL,
             expr_dialect: readyset_data::Dialect::DEFAULT_POSTGRESQL,
+        }
+        .run(options),
+        DatabaseType::MongoDB => NoriaAdapter {
+            description: "MongoDB adapter for ReadySet.",
+            default_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0 , 1)), 3306),
+            connection_handler: MongoDbHandler {
+                enable_statement_logging: options.tracing.statement_logging,
+            },
+            database_type: DatabaseType::MongoDB,
+            parse_dialect: nom_sql::Dialect::MongoDB,
+            expr_dialect: readyset_data::Dialect::DEFAULT_MONGODB,
         }
         .run(options),
     }
