@@ -11,7 +11,8 @@ use std::time::Duration;
 use clap::{Parser, ValueEnum};
 use derive_more::From;
 use error::{ConnectionType, DatabaseTypeParseError};
-use futures::{StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt, executor::block_on};
+use mongodb::{Client, options::ClientOptions};
 use mysql::prelude::AsQuery;
 use mysql_async::prelude::Queryable;
 use mysql_async::OptsBuilder;
@@ -177,6 +178,7 @@ impl FromStr for DatabaseType {
         match s.to_lowercase().as_str() {
             "mysql" => Ok(Self::MySQL),
             "postgresql" | "postgres" => Ok(Self::PostgreSQL),
+            "mongodb" => Ok(Self::MongoDB),
             _ => Err(DatabaseTypeParseError {
                 value: s.to_owned(),
             }),
@@ -213,6 +215,7 @@ impl Display for DatabaseType {
 pub enum DatabaseURL {
     MySQL(mysql_async::Opts),
     PostgreSQL(pgsql::Config),
+    MongoDB(ClientOptions),
 }
 
 /// Parses URLs starting with either `"mysql://"` or `"postgresql://"`.
@@ -243,6 +246,11 @@ impl FromStr for DatabaseURL {
             Ok(Self::MySQL(mysql::Opts::from_url(s)?))
         } else if s.starts_with("postgresql://") || s.starts_with("postgres://") {
             Ok(Self::PostgreSQL(pgsql::Config::from_str(s)?))
+        } else if s.starts_with("mongodb://") {
+            // mongo connection string parsing performs DNS resolution 
+            // (whereas mysql and pg do not). hence, it's an async call in the mongo driver.
+            // Not sure block_on() is the best, but it works (i think)
+            Ok(Self::MongoDB(block_on(ClientOptions::parse(s))?))
         } else {
             Err(DatabaseURLParseError::InvalidFormat)
         }
@@ -281,6 +289,21 @@ impl DatabaseURL {
                 let connection_handle =
                     tokio::spawn(async move { connection.await.map_err(Into::into) });
                 Ok(DatabaseConnection::PostgreSQL(client, connection_handle))
+            }
+            DatabaseURL::MongoDB(options) => {
+                if tls_connector_builder.is_some() {
+                    Err(DatabaseError::TlsUnsupported)
+                } else {
+                    // the mongo driver works by maintaining it's own pool of connections
+                    // to the all the members of the replset, instead of just creating a single socket/connection.
+                    // blatantly ignore that for now, this is just a PoC :shrug:
+                    // its' arguable we could keep a reference to the Client in DatabaseURL ...
+                    
+                    // fwiw, there's no async connect function 
+                    // on Client that also takes a client_options struct :shrug:
+                    let client = Client::with_options(options.clone())?;
+                    Ok(DatabaseConnection::MongoDB (client))
+                }
             }
         }
     }
@@ -338,6 +361,12 @@ impl DatabaseURL {
                     tokio::spawn(async move { connection.await.map_err(Into::into) });
                 Ok(DatabaseConnection::PostgreSQL(client, connection_handle))
             }
+            DatabaseURL::MongoDB(options) => {
+                // TODO(jeb) ignoring the drop/create schema (mongodb database), for now ....
+
+                let client = Client::with_options(options.clone())?;
+                Ok(DatabaseConnection::MongoDB (client))
+            }
         }
     }
 
@@ -347,6 +376,7 @@ impl DatabaseURL {
         match self {
             DatabaseURL::MySQL(_) => DatabaseType::MySQL,
             DatabaseURL::PostgreSQL(_) => DatabaseType::PostgreSQL,
+            DatabaseURL::MongoDB(_) => DatabaseType::MongoDB,
         }
     }
 
@@ -355,6 +385,12 @@ impl DatabaseURL {
         match self {
             DatabaseURL::MySQL(opts) => opts.user(),
             DatabaseURL::PostgreSQL(config) => config.get_user(),
+            DatabaseURL::MongoDB(options) => {
+                match options.credential {
+                    Some(cred) => cred.username.as_deref(),
+                    None => None,
+                }
+            }
         }
     }
 
@@ -369,6 +405,12 @@ impl DatabaseURL {
             DatabaseURL::PostgreSQL(opts) => opts.get_password().map(|p| -> &str {
                 str::from_utf8(p).expect("PostgreSQL URL configured with non-utf8 password")
             }),
+            DatabaseURL::MongoDB(options) => {
+                match options.credential {
+                    Some(cred) => cred.password.as_deref(),
+                    None => None,
+                }
+            }
         }
     }
 
@@ -399,6 +441,7 @@ impl DatabaseURL {
         match self {
             DatabaseURL::MySQL(opts) => opts.db_name(),
             DatabaseURL::PostgreSQL(config) => config.get_dbname(),
+            DatabaseURL::MongoDB(options) => options.default_database.as_deref(),
         }
     }
 
@@ -413,6 +456,9 @@ impl DatabaseURL {
             DatabaseURL::PostgreSQL(config) => {
                 config.dbname(&db_name);
             }
+            DatabaseURL::MongoDB(options) => {
+                options.default_database = Some(db_name)
+            }
         }
     }
 }
@@ -426,6 +472,7 @@ pub enum DatabaseConnection {
         tokio_postgres::Client,
         tokio::task::JoinHandle<Result<(), ReadySetError>>,
     ),
+    MongoDB(Client),
 }
 
 async fn convert_mysql_results<'a, 't, P, V>(
@@ -518,6 +565,10 @@ impl DatabaseConnection {
             DatabaseConnection::PostgreSQL(client, _jh) => {
                 Ok(client.prepare(query.as_ref()).await?.into())
             }
+            DatabaseConnection::MongoDB(client) => {
+                // pretty sure this is a NOP, but not sure what to return ...
+                Ok(DatabaseStatement::MongoDB())
+            }
         }
     }
 
@@ -603,6 +654,14 @@ impl DatabaseConnection {
             None
         }
     }
+
+    pub fn as_mongo_conn(&mut self) -> Option<&mut Client> {
+        if let DatabaseConnection::MongoDB(client) = self {
+            Some(client)
+        } else {
+            None
+        }
+    }
 }
 
 /// An enum wrapper around various prepared statement types. Either a mysql_async prepared
@@ -614,6 +673,8 @@ pub enum DatabaseStatement {
     MySql(mysql_async::Statement),
     /// A PostgreSQL prepared statement returned from a prepare call in `tokio_postgres`.
     Postgres(tokio_postgres::Statement),
+    /// Ain't no such thing as a prepared statement in MongoDB!
+    MongoDB(),
     /// A simple query string that a user would like to be both prepared and executed.
     Str(String),
 }

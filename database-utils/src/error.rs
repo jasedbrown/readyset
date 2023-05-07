@@ -14,6 +14,9 @@ pub enum DatabaseError<ValueError: Debug + Error> {
     MySQL(#[from] mysql::Error),
 
     #[error(transparent)]
+    MongoDB(#[from] mongodb::error::Error),
+
+    #[error(transparent)]
     NativeTls(#[from] native_tls::Error),
 
     #[error("Error converting value from result set")]
@@ -30,6 +33,7 @@ pub enum DatabaseError<ValueError: Debug + Error> {
 pub enum ConnectionType {
     MySQL,
     PostgreSQL,
+    MongoDB,
 }
 
 impl Display for ConnectionType {
@@ -37,6 +41,7 @@ impl Display for ConnectionType {
         let s = match self {
             ConnectionType::MySQL => "MySQL".to_string(),
             ConnectionType::PostgreSQL => "PostgreSQL".to_string(),
+            ConnectionType::MongoDB => "MongoDB".to_string(),
         };
         write!(f, "{}", s)
     }
@@ -53,6 +58,9 @@ pub enum DatabaseURLParseError {
 
     #[error(transparent)]
     MySQL(#[from] mysql::UrlError),
+
+    #[error(transparent)]
+    MongoDB(#[from] mongodb::error::Error),
 }
 
 /// Error type for the [`FromStr`] implementation for [`DatabaseType`]
