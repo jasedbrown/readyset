@@ -7,6 +7,7 @@
     let_chains
 )]
 pub mod db_util;
+pub(crate) mod mongodb_connector;
 pub(crate) mod mysql_connector;
 pub(crate) mod noria_adapter;
 pub(crate) mod postgres_connector;
@@ -14,6 +15,7 @@ pub(crate) mod table_filter;
 
 use std::time::Duration;
 
+pub use mongodb_connector::OplogPosition;
 pub use mysql_connector::BinlogPosition;
 pub use noria_adapter::{cleanup, NoriaAdapter};
 pub use postgres_connector::PostgresPosition;

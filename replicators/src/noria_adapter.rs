@@ -9,6 +9,7 @@ use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 use failpoint_macros::set_failpoint;
 use futures::FutureExt;
 use metrics::{counter, histogram};
+use mongodb::options::ClientOptions;
 use mysql::prelude::Queryable;
 use mysql::{OptsBuilder, PoolConstraints, PoolOpts, SslOpts};
 use nom_sql::Relation;
@@ -31,6 +32,7 @@ use tracing::{debug, error, info, info_span, trace, warn, Instrument};
 use {mysql_async as mysql, tokio_postgres as pgsql};
 
 use crate::db_util::{CreateSchema, DatabaseSchemas};
+use crate::mongodb_connector::MongoDbOplogConnector;
 use crate::mysql_connector::{MySqlBinlogConnector, MySqlReplicator};
 use crate::postgres_connector::{
     drop_publication, drop_readyset_schema, drop_replication_slot, PostgresReplicator,
@@ -230,6 +232,20 @@ impl NoriaAdapter {
                     tls_connector,
                     pool,
                     repl_slot_name,
+                    enable_statement_logging,
+                )
+                .await
+            }
+            DatabaseURL::MongoDB(options) => {
+                let noria = noria.clone();
+                let config = config.clone();
+                NoriaAdapter::start_inner_mongodb(
+                    options,
+                    noria,
+                    config,
+                    &mut notify,
+                    resnapshot,
+                    &telemetry_sender,
                     enable_statement_logging,
                 )
                 .await
@@ -659,6 +675,46 @@ impl NoriaAdapter {
         info!("Streaming replication started");
 
         adapter.main_loop(&mut min_pos, None).await?;
+
+        unreachable!("`main_loop` will never stop with an Ok status if `until = None`");
+    }
+
+    async fn start_inner_mongodb(
+        mut client_options: ClientOptions,
+        mut noria: ReadySetHandle,
+        mut config: UpstreamConfig,
+        ready_notify: &mut Option<Arc<Notify>>,
+        resnapshot: bool,
+        telemetry_sender: &TelemetrySender,
+        enable_statement_logging: bool,
+    ) -> ReadySetResult<!> {
+        let connector = Box::new(
+            MongoDbOplogConnector::connect(
+                client_options.clone(),
+                pos.clone(),
+                enable_statement_logging,
+            )
+            .await?,
+        );
+
+        let mut adapter = NoriaAdapter {
+            noria: noria.clone(),
+            connector,
+            replication_offsets,
+            mutator_map: HashMap::new(),
+            warned_missing_tables: HashSet::new(),
+            table_filter,
+            supports_resnapshot: true,
+            dialect: Dialect::DEFAULT_MONGODB,
+        };
+
+        let mut current_pos: ReplicationOffset = pos.try_into()?;
+        // Let waiters know that the initial snapshotting is complete.
+        if let Some(notify) = ready_notify.take() {
+            notify.notify_one();
+        }
+
+        adapter.main_loop(&mut current_pos, None).await?;
 
         unreachable!("`main_loop` will never stop with an Ok status if `until = None`");
     }

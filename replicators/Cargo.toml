@@ -31,6 +31,7 @@ postgres-types = { workspace = true, features = ["with-chrono-0_4", "with-serde_
 postgres-native-tls = { workspace = true }
 postgres-protocol = { workspace = true }
 mysql_async = { workspace = true }
+mongodb = { workspace = true }
 
 mysql_common = "0.29.2"
 nom-sql = { path = "../nom-sql" }

@@ -1153,6 +1153,7 @@ impl_from_to_string!(bincode::Error, SerializationFailed);
 impl_from_to_string!(rmp_serde::encode::Error, SerializationFailed);
 impl_from_to_string!(rmp_serde::decode::Error, SerializationFailed);
 impl_from_to_string!(url::ParseError, UrlParseFailed);
+impl_from_to_string!(mongodb::error::Error, ReplicationFailed);
 impl_from_to_string!(mysql_async::Error, ReplicationFailed);
 impl_from_to_string!(tokio_postgres::Error, ReplicationFailed);
 impl_from_to_string!(deadpool_postgres::PoolError, ReplicationFailed);

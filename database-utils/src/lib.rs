@@ -362,9 +362,10 @@ impl DatabaseURL {
                 Ok(DatabaseConnection::PostgreSQL(client, connection_handle))
             }
             DatabaseURL::MongoDB(options) => {
-                // TODO(jeb) ignoring the drop/create schema (mongodb database), for now ....
-
+                // ignoring the create database part, as mongo can create new database on the fly
+                let test_db_name = options.default_database.expect("Must have a database name declared");
                 let client = Client::with_options(options.clone())?;
+                client.database(&test_db_name).drop(options).await?;
                 Ok(DatabaseConnection::MongoDB (client))
             }
         }
@@ -386,7 +387,7 @@ impl DatabaseURL {
             DatabaseURL::MySQL(opts) => opts.user(),
             DatabaseURL::PostgreSQL(config) => config.get_user(),
             DatabaseURL::MongoDB(options) => {
-                match options.credential {
+                match &options.credential {
                     Some(cred) => cred.username.as_deref(),
                     None => None,
                 }
@@ -406,7 +407,7 @@ impl DatabaseURL {
                 str::from_utf8(p).expect("PostgreSQL URL configured with non-utf8 password")
             }),
             DatabaseURL::MongoDB(options) => {
-                match options.credential {
+                match &options.credential {
                     Some(cred) => cred.password.as_deref(),
                     None => None,
                 }
@@ -432,6 +433,20 @@ impl DatabaseURL {
                     pgsql::config::Host::Tcp(tcp) => tcp.as_str(),
                     pgsql::config::Host::Unix(p) => p.to_str().expect("Invalid UTF-8 in host"),
                 }
+            }
+            DatabaseURL::MongoDB(_options) => {
+                // naviely just grabbing the first entry in the hosts list, for now :shrug:
+                // let some_server_addr = options.hosts.first().expect("MongoDB URL has no hostname set");
+                // let f = some_server_addr.to_string();
+                // f.as_ref()
+
+                // all this being said, I can't return the reference to the local variable here,
+                // as I'm actaully creating the String/&string from the mongodb::ServerAddress type.
+                // the mysql/pg types already maintain the url as a &str, so I'd need to change the 
+                // signature to get it to work with the mongo driver. As this 'host()' function
+                // is used once, and in a not-important code path, i'm hacking this to make
+                // the compiler happy. Learning rust is a long journey ....
+                "mongodb://fake-o_url"
             }
         }
     }
@@ -527,6 +542,10 @@ impl DatabaseConnection {
                 client.simple_query(stmt.as_ref()).await?;
                 Ok(())
             }
+            DatabaseConnection::MongoDB(_client) => {
+                // TODO(jeb) this is a cop-out, for now
+                Ok(())
+            }
         }
     }
 
@@ -551,6 +570,9 @@ impl DatabaseConnection {
                     .await
                     .map_err(DatabaseError::PostgreSQL)
             }
+            DatabaseConnection::MongoDB(_client) => {
+                panic!("not yet (?)")
+            }
         }
     }
 
@@ -565,7 +587,7 @@ impl DatabaseConnection {
             DatabaseConnection::PostgreSQL(client, _jh) => {
                 Ok(client.prepare(query.as_ref()).await?.into())
             }
-            DatabaseConnection::MongoDB(client) => {
+            DatabaseConnection::MongoDB(_client) => {
                 // pretty sure this is a NOP, but not sure what to return ...
                 Ok(DatabaseStatement::MongoDB())
             }
@@ -607,6 +629,9 @@ impl DatabaseConnection {
             .await
             .map_err(DatabaseError::PostgreSQL),
             DatabaseStatement::Str(s) => self.execute_str(s.as_ref(), params).await,
+            DatabaseStatement::MongoDB() => {
+                panic!("wtf?!?!?")
+            }
         }
     }
 
@@ -635,6 +660,9 @@ impl DatabaseConnection {
                 convert_pgsql_results(client.query_raw(stmt, params).await?)
                     .await
                     .map_err(DatabaseError::PostgreSQL)
+            }
+            DatabaseConnection::MongoDB(_client) => {
+                panic!("wtf?!?!?")
             }
         }
     }
