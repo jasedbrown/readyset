@@ -4,11 +4,11 @@ use async_trait::async_trait;
 // use futures::TryStreamExt;
 use mongodb::Client;
 use mongodb::bson::Document;
-use mongodb::change_stream::{ChangeStream, event::ChangeStreamEvent};
-// use mongodb::error::Result;
+use mongodb::change_stream::ChangeStream;
+use mongodb::change_stream::event::{ChangeStreamEvent, OperationType::*};
 use mongodb::options::{ChangeStreamOptions, ReadConcern, SelectionCriteria, ReadPreference, ClientOptions};
 use readyset_client::replication::ReplicationOffset;
-use readyset_errors::ReadySetResult;
+use readyset_errors::{ReadySetResult, internal_err};
 
 use super::OplogPosition;
 use crate::noria_adapter::{Connector, ReplicationAction};
@@ -36,13 +36,13 @@ impl MongoDbOplogConnector {
 
         let change_stream_options = ChangeStreamOptions::builder()
             .batch_size(Some(16 as u32))                     // sure, 16 seems like a fine batch size :shrug:
-            .start_after(Some(next_position.resume_token))
+            .start_at_operation_time(Some(next_position.timestamp.clone()))
             .max_await_time(Some(Duration::new(1, 0))) // one second? not sure if this drops the stream or just returns from blocking...
             .read_concern(Some(ReadConcern::MAJORITY))
             .selection_criteria(Some(SelectionCriteria::ReadPreference(ReadPreference::Primary)))
             .build()
         ;
-        let change_stream: ChangeStream<ChangeStreamEvent<Document>> = client.watch(None, change_stream_options)?;
+        let change_stream: ChangeStream<ChangeStreamEvent<Document>> = client.watch(None, change_stream_options).await?;
 
         let connector = MongoDbOplogConnector {
             client: client,
@@ -58,15 +58,49 @@ impl MongoDbOplogConnector {
         until: Option<&ReplicationOffset>
     ) -> mongodb::error::Result<(ReplicationAction, &OplogPosition)> {
         loop {
-            if let Some(entry) = self.change_stream.next_if_any().await.transpose()? {
-                let resume_token = self.change_stream.resume_token()?;
-                self.next_position = OplogPosition { resume_token };
+            if let Some(event) = self.change_stream.next_if_any().await? {
+                // let resume_token = self.change_stream.resume_token().ok_or_else(|| {
+                //     mongodb::error::Error::custom(Box::new(internal_err!("couldn't get the oplog position")))
+                // })?;
+                let timestamp = event.cluster_time.ok_or_else(|| {
+                    mongodb::error::Error::custom(Box::new(internal_err!("couldn't get the clusterTimestamp of the event")))
+                })?;
+                self.next_position = OplogPosition { timestamp };
 
-                // entry
+                match event.operation_type {
+                    Insert => {
 
+                    },
+                    Update => {
 
+                    },
+                    Replace => {
 
-                Ok((entry, &self.next_position))
+                    },
+                    Delete => {
+
+                    },
+                    Drop => {
+
+                    },
+                    Rename => {
+
+                    },
+                    DropDatabase => {
+
+                    },
+                    Invalidate => {
+
+                    },
+                    Other(s) => {
+
+                    },
+                    _ => {
+
+                    }
+                }
+
+                // Ok((entry, &self.next_position))
             }
 
             // We didn't get an actionable event, but we still need to check that we haven't reached
