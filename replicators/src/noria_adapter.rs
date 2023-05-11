@@ -31,6 +31,7 @@ use tokio::sync::Notify;
 use tracing::{debug, error, info, info_span, trace, warn, Instrument};
 use {mysql_async as mysql, tokio_postgres as pgsql};
 
+use crate::OplogPosition;
 use crate::db_util::{CreateSchema, DatabaseSchemas};
 use crate::mongodb_connector::MongoDbOplogConnector;
 use crate::mysql_connector::{MySqlBinlogConnector, MySqlReplicator};
@@ -688,35 +689,56 @@ impl NoriaAdapter {
         telemetry_sender: &TelemetrySender,
         enable_statement_logging: bool,
     ) -> ReadySetResult<!> {
-        // let connector = Box::new(
-        //     MongoDbOplogConnector::connect(
-        //         client_options.clone(),
-        //         pos.clone(),
-        //         enable_statement_logging,
-        //     )
-        //     .await?,
-        // );
+        // Both the mysql and pg implementations grab a copy of the full snapshot
+        // of the database before attempting to do CDC, which is very reasonable.
+        // As this mongodb implementation is probably not reasonable at all, I'm punting
+        // on trying to get a snapshot and just gonna start the change stream.
+        // Grabbing the snapshot is not exceedingly difficult (i think), but more for
+        // a full-blown implemetation/support of mongo, whereas this is just a skunkworks
+        // hack project.
 
-        // let mut adapter = NoriaAdapter {
-        //     noria: noria.clone(),
-        //     connector,
-        //     replication_offsets,
-        //     mutator_map: HashMap::new(),
-        //     warned_missing_tables: HashSet::new(),
-        //     table_filter,
-        //     supports_resnapshot: true,
-        //     dialect: Dialect::DEFAULT_MONGODB,
-        // };
+        // Load the replication offset for all tables and the schema from ReadySet
+        let mut replication_offsets = noria.replication_offsets().await?;
 
-        // let mut current_pos: ReplicationOffset = pos.try_into()?;
-        // // Let waiters know that the initial snapshotting is complete.
-        // if let Some(notify) = ready_notify.take() {
-        //     notify.notify_one();
-        // }
+        let table_filter = TableFilter::try_new(
+            nom_sql::Dialect::MongoDB,
+            config.replication_tables.take(),
+            client_options.default_database.as_deref(),
+        )?;
+        let pos = match replication_offsets.max_offset() {
+            Some(s) => s.clone().into(),
+            None => OplogPosition { timestamp: 0 }
+        };
 
-        // adapter.main_loop(&mut current_pos, None).await?;
+        let connector = Box::new(
+            MongoDbOplogConnector::connect(
+                client_options.clone(),
+                pos.clone(),
+                enable_statement_logging,
+            )
+            .await?,
+        );
 
-        // unreachable!("`main_loop` will never stop with an Ok status if `until = None`");
+        let mut adapter = NoriaAdapter {
+            noria: noria.clone(),
+            connector,
+            replication_offsets,
+            mutator_map: HashMap::new(),
+            warned_missing_tables: HashSet::new(),
+            table_filter,
+            supports_resnapshot: true,
+            dialect: Dialect::DEFAULT_MONGODB,
+        };
+
+        let mut current_pos: ReplicationOffset = pos.try_into()?;
+        // Let waiters know that the initial snapshotting is complete.
+        if let Some(notify) = ready_notify.take() {
+            notify.notify_one();
+        }
+
+        adapter.main_loop(&mut current_pos, None).await?;
+
+        unreachable!("`main_loop` will never stop with an Ok status if `until = None`");
     }
 
     /// Apply a DDL string to noria with the current log position
