@@ -1,9 +1,9 @@
 use mongodb::bson::Timestamp;
+use readyset_client::replication::ReplicationOffset;
 
 mod connector;
 
 pub(crate) use connector::MongoDbOplogConnector;
-use readyset_client::replication::ReplicationOffset;
 
 // Altight, here's the situation: ResumeToken works great for communicating
 // just with Mongo (for resuming a change stream), but it's opaque and a 
@@ -79,6 +79,15 @@ impl From<u128> for OplogPosition {
         OplogPosition { 
             timestamp: Self::from_u128(value) 
         }
+    }
+}
+
+impl From<OplogPosition> for u64 {
+    fn from(value: OplogPosition) -> Self {
+        let upper = (value.timestamp.time as u64) << 32;
+        let lower = value.timestamp.increment as u64;
+
+        upper | lower
     }
 }
 

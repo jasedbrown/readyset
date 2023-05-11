@@ -688,35 +688,35 @@ impl NoriaAdapter {
         telemetry_sender: &TelemetrySender,
         enable_statement_logging: bool,
     ) -> ReadySetResult<!> {
-        let connector = Box::new(
-            MongoDbOplogConnector::connect(
-                client_options.clone(),
-                pos.clone(),
-                enable_statement_logging,
-            )
-            .await?,
-        );
+        // let connector = Box::new(
+        //     MongoDbOplogConnector::connect(
+        //         client_options.clone(),
+        //         pos.clone(),
+        //         enable_statement_logging,
+        //     )
+        //     .await?,
+        // );
 
-        let mut adapter = NoriaAdapter {
-            noria: noria.clone(),
-            connector,
-            replication_offsets,
-            mutator_map: HashMap::new(),
-            warned_missing_tables: HashSet::new(),
-            table_filter,
-            supports_resnapshot: true,
-            dialect: Dialect::DEFAULT_MONGODB,
-        };
+        // let mut adapter = NoriaAdapter {
+        //     noria: noria.clone(),
+        //     connector,
+        //     replication_offsets,
+        //     mutator_map: HashMap::new(),
+        //     warned_missing_tables: HashSet::new(),
+        //     table_filter,
+        //     supports_resnapshot: true,
+        //     dialect: Dialect::DEFAULT_MONGODB,
+        // };
 
-        let mut current_pos: ReplicationOffset = pos.try_into()?;
-        // Let waiters know that the initial snapshotting is complete.
-        if let Some(notify) = ready_notify.take() {
-            notify.notify_one();
-        }
+        // let mut current_pos: ReplicationOffset = pos.try_into()?;
+        // // Let waiters know that the initial snapshotting is complete.
+        // if let Some(notify) = ready_notify.take() {
+        //     notify.notify_one();
+        // }
 
-        adapter.main_loop(&mut current_pos, None).await?;
+        // adapter.main_loop(&mut current_pos, None).await?;
 
-        unreachable!("`main_loop` will never stop with an Ok status if `until = None`");
+        // unreachable!("`main_loop` will never stop with an Ok status if `until = None`");
     }
 
     /// Apply a DDL string to noria with the current log position

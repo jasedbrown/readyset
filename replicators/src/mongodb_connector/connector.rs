@@ -1,14 +1,17 @@
 use core::time::Duration;
 
 use async_trait::async_trait;
-// use futures::TryStreamExt;
+use mongodb::bson::Bson;
 use mongodb::Client;
 use mongodb::bson::Document;
 use mongodb::change_stream::ChangeStream;
 use mongodb::change_stream::event::{ChangeStreamEvent, OperationType::*};
 use mongodb::options::{ChangeStreamOptions, ReadConcern, SelectionCriteria, ReadPreference, ClientOptions};
+use nom_sql::Relation;
 use readyset_client::replication::ReplicationOffset;
+use readyset_data::DfValue;
 use readyset_errors::{ReadySetResult, internal_err};
+use tracing::info;
 
 use super::OplogPosition;
 use crate::noria_adapter::{Connector, ReplicationAction};
@@ -67,9 +70,42 @@ impl MongoDbOplogConnector {
                 })?;
                 self.next_position = OplogPosition { timestamp };
 
+                if self.enable_statement_logging {
+                    info!(target: "replicator_statement", "{:?}", event);
+                }
+
+                // event types: https://www.mongodb.com/docs/manual/reference/change-events/
                 match event.operation_type {
                     Insert => {
+                        let namespace = event.ns.ok_or_else(|| {
+                            mongodb::error::Error::custom(Box::new(internal_err!("couldn't get the namespace of the event")))
+                        })?;
+                        let id_doc = event.document_key.ok_or_else(|| {
+                            mongodb::error::Error::custom(Box::new(internal_err!("couldn't get the document id of the event")))
+                        })?;
+                        let doc: Document = event.full_document.ok_or_else(|| {
+                            mongodb::error::Error::custom(Box::new(internal_err!("couldn't get the document of the event")))
+                        })?;
 
+                        // convert doc to noria rows....
+                        let mut inserted_docs = Vec::new();
+                        inserted_docs.push(readyset_client::TableOperation::Insert(
+                            oplog_doc_to_noria_row(&doc)?,
+                        ));
+
+                        return Ok((
+                            ReplicationAction::TableAction {
+                                table: Relation {
+                                    schema: Some(namespace.db.into()),
+                                    name: namespace.coll.ok_or_else(|| {
+                                        mongodb::error::Error::custom(Box::new(internal_err!("couldn't get the collection of the event")))
+                                    })?.into(),
+                                },
+                                actions: inserted_docs,
+                                txid: Some(0), // TODO(jeb) fix this
+                            },
+                            &self.next_position,
+                        ));
                     },
                     Update => {
 
@@ -90,10 +126,10 @@ impl MongoDbOplogConnector {
 
                     },
                     Invalidate => {
-
+                        // we need to blow up the change stream and start it over when we get this event type
                     },
                     Other(s) => {
-
+                        // lol, does the mongo driver not even have a clue here :shrug:
                     },
                     _ => {
 
@@ -115,6 +151,30 @@ impl MongoDbOplogConnector {
     }
 }
 
+fn oplog_doc_to_noria_row(
+    doc: &Document,
+) -> mongodb::error::Result<Vec<DfValue>> {
+
+    let mut inserted_columns: Vec<DfValue> = Vec::new();
+    
+    // assumming no nested/sub documents, keep life simple
+    for item in doc.iter() {
+        let key = item.0;
+        let val = item.1;
+        match val {
+            // TODO(jeb) do some better error handling rather than expect()
+            Bson::Double(v) => inserted_columns.push((*v).try_into().expect("bad f64")),
+            Bson::String(v) => inserted_columns.push((*v).try_into().expect("bad string")),
+            Bson::Boolean(v) => inserted_columns.push((*v).try_into().expect("bad bool")),
+            Bson::Int32(v) => inserted_columns.push((*v).try_into().expect("bad i32")),
+            Bson::Int64(v) => inserted_columns.push((*v).try_into().expect("bad i64")),
+            Bson::ObjectId(v) => panic!("handle me"),
+            Bson::DateTime(v) => panic!("handle me"),
+            _ => panic!("handle me"),
+        };
+    }
+    Ok(inserted_columns)
+}
 
 #[async_trait]
 impl Connector for MongoDbOplogConnector {
@@ -123,7 +183,8 @@ impl Connector for MongoDbOplogConnector {
         last_pos: &ReplicationOffset,
         until: Option<&ReplicationOffset>,
     ) -> ReadySetResult<(ReplicationAction, ReplicationOffset)> {
-        let (action, pos) =- self.next_action_inner(until).await?;
-        Ok((action, pos.try_into()?))
+        let (action, pos) = self.next_action_inner(until).await?;
+
+        Ok((action, pos.into()))
     }
 }
