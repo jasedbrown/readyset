@@ -9,6 +9,7 @@ use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 use failpoint_macros::set_failpoint;
 use futures::FutureExt;
 use metrics::{counter, histogram};
+use mongodb::bson;
 use mongodb::options::ClientOptions;
 use mysql::prelude::Queryable;
 use mysql::{OptsBuilder, PoolConstraints, PoolOpts, SslOpts};
@@ -705,9 +706,11 @@ impl NoriaAdapter {
             config.replication_tables.take(),
             client_options.default_database.as_deref(),
         )?;
-        let pos = match replication_offsets.max_offset() {
-            Some(s) => s.clone().into(),
-            None => OplogPosition { timestamp: 0 }
+        let pos: OplogPosition = match replication_offsets.max_offset()? {
+            Some(repl_offset) => repl_offset.clone().into(),
+            None => OplogPosition { 
+                timestamp: bson::Timestamp { time: 0, increment: 0  } 
+            }
         };
 
         let connector = Box::new(
@@ -730,7 +733,7 @@ impl NoriaAdapter {
             dialect: Dialect::DEFAULT_MONGODB,
         };
 
-        let mut current_pos: ReplicationOffset = pos.try_into()?;
+        let mut current_pos: ReplicationOffset = pos.into()?;
         // Let waiters know that the initial snapshotting is complete.
         if let Some(notify) = ready_notify.take() {
             notify.notify_one();

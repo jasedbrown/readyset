@@ -180,8 +180,8 @@ impl ReplContext {
                     Some(type_oids) => match &self.connection {
                         DatabaseConnection::MySQL(_) => {
                             bail!("MySQL can't handle prepare with types")
-                        }
-                        DatabaseConnection::PostgreSQL(client, _) => client
+                        },
+                        DatabaseConnection::PostgreSQL(client, _) => { client
                             .prepare_typed(
                                 query,
                                 &type_oids
@@ -193,8 +193,12 @@ impl ReplContext {
                                     .collect::<Result<Vec<_>, _>>()?,
                             )
                             .await?
-                            .into(),
-                    },
+                            .into()
+                        },
+                        DatabaseConnection::MongoDB(_) => {
+                            bail!("????")
+                        }
+                    }
                 };
                 self.prepared_statements.push(stmt);
 

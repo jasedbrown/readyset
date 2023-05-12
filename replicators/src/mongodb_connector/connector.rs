@@ -16,7 +16,7 @@ use tracing::info;
 use super::OplogPosition;
 use crate::noria_adapter::{Connector, ReplicationAction};
 
-/// A connector that connectst to a MongoDB replset (targetting the primary)
+/// A connector that connectst to a MongoDB replset (targeting the primary)
 /// /// and tails the oplog from a given position.
 pub(crate) struct MongoDbOplogConnector {
     /// Client instance that maintains the connections to the backing mongodb replset.
@@ -183,6 +183,11 @@ impl Connector for MongoDbOplogConnector {
         last_pos: &ReplicationOffset,
         until: Option<&ReplicationOffset>,
     ) -> ReadySetResult<(ReplicationAction, ReplicationOffset)> {
+        // match self.next_action_inner(until).await {
+        //     Ok((action, pos)) => Ok((action, pos.into())),
+        //     Err(e) => panic!("asdfasdfasdf")
+        // }
+
         let (action, pos) = self.next_action_inner(until).await?;
 
         Ok((action, pos.into()))
