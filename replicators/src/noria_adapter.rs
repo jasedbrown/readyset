@@ -682,12 +682,12 @@ impl NoriaAdapter {
     }
 
     async fn start_inner_mongodb(
-        mut client_options: ClientOptions,
+        client_options: ClientOptions,
         mut noria: ReadySetHandle,
         mut config: UpstreamConfig,
         ready_notify: &mut Option<Arc<Notify>>,
-        resnapshot: bool,
-        telemetry_sender: &TelemetrySender,
+        _resnapshot: bool,
+        _telemetry_sender: &TelemetrySender,
         enable_statement_logging: bool,
     ) -> ReadySetResult<!> {
         // Both the mysql and pg implementations grab a copy of the full snapshot
@@ -699,7 +699,7 @@ impl NoriaAdapter {
         // hack project.
 
         // Load the replication offset for all tables and the schema from ReadySet
-        let mut replication_offsets = noria.replication_offsets().await?;
+        let replication_offsets = noria.replication_offsets().await?;
 
         let table_filter = TableFilter::try_new(
             nom_sql::Dialect::MongoDB,
@@ -733,7 +733,7 @@ impl NoriaAdapter {
             dialect: Dialect::DEFAULT_MONGODB,
         };
 
-        let mut current_pos: ReplicationOffset = pos.into()?;
+        let mut current_pos: ReplicationOffset = pos.into();
         // Let waiters know that the initial snapshotting is complete.
         if let Some(notify) = ready_notify.take() {
             notify.notify_one();

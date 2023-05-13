@@ -21,8 +21,18 @@ use crate::noria_adapter::{Connector, ReplicationAction};
 pub(crate) struct MongoDbOplogConnector {
     /// Client instance that maintains the connections to the backing mongodb replset.
     client: mongodb::Client,
+
+    // It would be the best to create this only in connect(), and be done.
+    // Unfortunately, I hit several compiler fails that ChangeStream<..> 
+    // does not implement the Send trait. As I couldn't figure out how to immediately resolve
+    // that (I tried the Arc<Mutex<>> pattern, as well), but something about the await 
+    // just didn't work. In order to plow ahead on the rest of this project, I'm naively
+    // ignoring for now, and doing the shitty thing just to move on. I'll end up learning more along the way .....
     /// The stream via which we get all the mongodb oplog entries.
-    change_stream: ChangeStream<ChangeStreamEvent<Document>>,
+    // change_stream: Arc<Mutex<ChangeStream<ChangeStreamEvent<Document>>>>,
+
+    change_stream_options: ChangeStreamOptions,
+
     /// If we just want to continue reading the binlog from a previous point
     next_position: OplogPosition,
     /// Whether to log statements received by the connector
@@ -43,13 +53,12 @@ impl MongoDbOplogConnector {
             .max_await_time(Some(Duration::new(1, 0))) // one second? not sure if this drops the stream or just returns from blocking...
             .read_concern(Some(ReadConcern::MAJORITY))
             .selection_criteria(Some(SelectionCriteria::ReadPreference(ReadPreference::Primary)))
-            .build()
-        ;
-        let change_stream: ChangeStream<ChangeStreamEvent<Document>> = client.watch(None, change_stream_options).await?;
+            .build();
 
         let connector = MongoDbOplogConnector {
             client: client,
-            change_stream: change_stream,
+            // change_stream: Arc::new(Mutex::new(change_stream)),
+            change_stream_options,
             next_position: next_position,
             enable_statement_logging: enable_statement_logging,
         };
@@ -60,11 +69,12 @@ impl MongoDbOplogConnector {
         &mut self, 
         until: Option<&ReplicationOffset>
     ) -> mongodb::error::Result<(ReplicationAction, &OplogPosition)> {
+
+        // TODO(jeb) should only create the change stream once, in connect(). See notes in MongoDbOplogConnector struct.
+        let mut change_stream: ChangeStream<ChangeStreamEvent<Document>> = self.client.watch(None, self.change_stream_options.clone()).await?;
+
         loop {
-            if let Some(event) = self.change_stream.next_if_any().await? {
-                // let resume_token = self.change_stream.resume_token().ok_or_else(|| {
-                //     mongodb::error::Error::custom(Box::new(internal_err!("couldn't get the oplog position")))
-                // })?;
+            if let Some(event) = change_stream.next_if_any().await? {
                 let timestamp = event.cluster_time.ok_or_else(|| {
                     mongodb::error::Error::custom(Box::new(internal_err!("couldn't get the clusterTimestamp of the event")))
                 })?;
@@ -80,7 +90,7 @@ impl MongoDbOplogConnector {
                         let namespace = event.ns.ok_or_else(|| {
                             mongodb::error::Error::custom(Box::new(internal_err!("couldn't get the namespace of the event")))
                         })?;
-                        let id_doc = event.document_key.ok_or_else(|| {
+                        let _id_doc = event.document_key.ok_or_else(|| {
                             mongodb::error::Error::custom(Box::new(internal_err!("couldn't get the document id of the event")))
                         })?;
                         let doc: Document = event.full_document.ok_or_else(|| {
@@ -128,7 +138,7 @@ impl MongoDbOplogConnector {
                     Invalidate => {
                         // we need to blow up the change stream and start it over when we get this event type
                     },
-                    Other(s) => {
+                    Other(_s) => {
                         // lol, does the mongo driver not even have a clue here :shrug:
                     },
                     _ => {
@@ -159,17 +169,17 @@ fn oplog_doc_to_noria_row(
     
     // assumming no nested/sub documents, keep life simple
     for item in doc.iter() {
-        let key = item.0;
+        let _key = item.0;
         let val = item.1;
         match val {
             // TODO(jeb) do some better error handling rather than expect()
             Bson::Double(v) => inserted_columns.push((*v).try_into().expect("bad f64")),
-            Bson::String(v) => inserted_columns.push((*v).try_into().expect("bad string")),
+            Bson::String(v) => inserted_columns.push((*v).clone().try_into().expect("bad string")),
             Bson::Boolean(v) => inserted_columns.push((*v).try_into().expect("bad bool")),
             Bson::Int32(v) => inserted_columns.push((*v).try_into().expect("bad i32")),
             Bson::Int64(v) => inserted_columns.push((*v).try_into().expect("bad i64")),
-            Bson::ObjectId(v) => panic!("handle me"),
-            Bson::DateTime(v) => panic!("handle me"),
+            Bson::ObjectId(_v) => panic!("handle me"),
+            Bson::DateTime(_v) => panic!("handle me"),
             _ => panic!("handle me"),
         };
     }
@@ -180,14 +190,9 @@ fn oplog_doc_to_noria_row(
 impl Connector for MongoDbOplogConnector {
     async fn next_action(
         &mut self,
-        last_pos: &ReplicationOffset,
+        _last_pos: &ReplicationOffset,
         until: Option<&ReplicationOffset>,
     ) -> ReadySetResult<(ReplicationAction, ReplicationOffset)> {
-        // match self.next_action_inner(until).await {
-        //     Ok((action, pos)) => Ok((action, pos.into())),
-        //     Err(e) => panic!("asdfasdfasdf")
-        // }
-
         let (action, pos) = self.next_action_inner(until).await?;
 
         Ok((action, pos.into()))

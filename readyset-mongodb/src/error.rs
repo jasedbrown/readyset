@@ -9,10 +9,8 @@ pub enum Error {
     #[error(transparent)]
     ReadySet(#[from] ReadySetError),
 
-    // TODO(jeb) when we actually get errors from mongo, create a 
-    // impl From<Error> for mongo::Error() below (like the mysql and pg impls)
-    // #[error(transparent)]
-    // MongoDB(#[from] mysql_async::Error),
+    #[error(transparent)]
+    MongoDB(#[from] mongodb::error::Error),
 
     #[error(transparent)]
     Io(#[from] io::Error),

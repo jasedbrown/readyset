@@ -6,8 +6,8 @@ use readyset_adapter::fallback_cache::FallbackCache;
 use readyset_adapter::upstream_database::UpstreamDestination;
 use readyset_client_metrics::QueryDestination;
 use readyset_data::DfValue;
-use readyset_errors::unsupported_err;
-use tracing::info_span;
+use readyset_errors::{unsupported_err, ReadySetError};
+// use tracing::info_span;
 
 use crate::Error;
 
@@ -92,7 +92,7 @@ impl UpstreamDatabase for MongoDbUpstream {
 
         // TODO(jeb) we could (should?) check for a minimum mongo version here ...
 
-        Ok(Self(client, upstream_config))
+        Ok(Self{ client, upstream_config })
     }
 
     async fn reset(&mut self) -> Result<(), Self::Error> {
@@ -107,7 +107,7 @@ impl UpstreamDatabase for MongoDbUpstream {
         self.upstream_config
             .upstream_db_url
             .as_deref()
-            .ok_or(ReadySetError::InvalidUpstreamDatabase)?
+            .unwrap()
     }
 
     fn database(&self) -> Option<&str> {
@@ -124,7 +124,7 @@ impl UpstreamDatabase for MongoDbUpstream {
 
     async fn prepare<'a, S>(
         &'a mut self, 
-        query: S,
+        _query: S,
     ) -> Result<UpstreamPrepare<Self>, Self::Error>
     where
         S: AsRef<str> + Send + Sync + 'a,
@@ -138,8 +138,8 @@ impl UpstreamDatabase for MongoDbUpstream {
 
     async fn execute<'a>(
         &'a mut self,
-        statement_id: u32,
-        params: &[DfValue],
+        _statement_id: u32,
+        _params: &[DfValue],
     ) -> Result<Self::QueryResult<'a>, Self::Error> {
         panic!("not yet")
     }
@@ -147,14 +147,14 @@ impl UpstreamDatabase for MongoDbUpstream {
     /// Execute a raw, un-prepared query
     async fn query<'a>(
         &'a mut self, 
-        query: &'a str,
+        _query: &'a str,
     ) -> Result<Self::QueryResult<'a>, Self::Error> {
         panic!("not yet")
     }
 
     async fn handle_ryw_write<'a, S>(
         &'a mut self,
-        query: S,
+        _query: S,
     ) -> Result<(Self::QueryResult<'a>, String), Self::Error>
     where
         S: AsRef<str> + Send + Sync + 'a {
