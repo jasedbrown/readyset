@@ -7,21 +7,23 @@ services:
   #     - MYSQL_DATABASE=testdb
   #   ports:
   #     - '3306:3306'
-  postgres:
-    image: postgres:14
-    environment:
-      - POSTGRES_PASSWORD=readyset
-      - POSTGRES_DB=testdb
-    ports:
-      - '5432:5432'
-    command:
-      - "postgres"
-      - "-c"
-      - "wal_level=logical"
-  # mongo:
-  #   image: mongo
+  # postgres:
+  #   image: postgres:14
   #   environment:
-  #     MONGO_INITDB_ROOT_USERNAME: root
-  #     MONGO_INITDB_ROOT_PASSWORD: example
+  #     - POSTGRES_PASSWORD=readyset
+  #     - POSTGRES_DB=testdb
   #   ports:
-  #     - '27017:27017'
+  #     - '5432:5432'
+  #   command:
+  #     - "postgres"
+  #     - "-c"
+  #     - "wal_level=logical"
+  mongo:
+    image: mongo:6.0.5
+    restart: always
+    # environment:
+      # MONGO_INITDB_ROOT_USERNAME: root
+      # MONGO_INITDB_ROOT_PASSWORD: example
+    ports:
+      - '27017:27017'
+    command: --replSet readyset_replset

@@ -16,6 +16,7 @@ lazy_static = "1.0"
 streaming-iterator = "0.1"
 futures-util = "0.3"
 pin-project = "1.0"
+mongodb-srv = { path = "../mongodb-srv" }
 mongodb = { workspace = true }
 
 readyset-client = { path = "../readyset-client" }

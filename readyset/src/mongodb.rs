@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use readyset_mongodb::{MongoDbQueryHandler, MongoDbUpstream};
 use tokio::net::TcpStream;
-
+use tracing::info;
 
 use crate::ConnectionHandler;
 
@@ -17,13 +17,15 @@ impl ConnectionHandler for MongoDbHandler {
 
     async fn process_connection(
         &mut self,
-        stream: TcpStream,
-        backend: readyset_adapter::Backend<MongoDbUpstream, MongoDbQueryHandler>,
+        _stream: TcpStream,
+        _backend: readyset_adapter::Backend<MongoDbUpstream, MongoDbQueryHandler>,
     ) {
+        info!("JEB::MongoDbHandler::process_connection - 1")
         // TODO(jeb): impl me!
     }
 
-    async fn immediate_error(self, stream: TcpStream, error_message: String) {
+    async fn immediate_error(self, _stream: TcpStream, _error_message: String) {
+        info!("JEB::MongoDbHandler::immediate_error - 1")
         // TODO(jeb) impl me!
     }
 }

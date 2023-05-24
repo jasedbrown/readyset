@@ -845,13 +845,18 @@ where
 
             rs_connect.in_scope(|| info!("Spawning migration handler task"));
             let fut = async move {
+                info!("JEB::MigrationMode::OutOfBand task - HEAD");
+                info!("JEB::MigrationMode::OutOfBand task - url: {:?}, no_upstream_connections: {:?}, dry_run: {:?}, migration_style: {:?}", 
+                        &upstream_config.upstream_db_url, no_upstream_connections, dry_run, migration_style);
                 let connection = span!(Level::INFO, "migration task upstream database connection");
                 let schema_search_path = if upstream_config.upstream_db_url.is_none()
                     || no_upstream_connections
                     || dry_run
                 {
+                    info!("JEB::MigrationMode::OutOfBand task - if block");
                     Default::default()
                 } else {
+                    info!("JEB::MigrationMode::OutOfBand task - else block");
                     loop {
                         let mut upstream = match H::UpstreamDatabase::connect(
                             upstream_config.clone(),
@@ -967,6 +972,7 @@ where
 
         // Run a readyset-server instance within this adapter.
         let internal_server_handle = if options.standalone || options.embedded_readers {
+            info!("JEB::building readyset-server instance HEAD");
             let authority = options.authority.clone();
             let deployment = options.deployment.clone();
             let mut builder = readyset_server::Builder::from_worker_options(
@@ -986,12 +992,14 @@ where
             builder.set_telemetry_sender(telemetry_sender.clone());
 
             let server_handle = rt.block_on(async move {
+                info!("JEB::building readyset-server instance - create authority");
                 let authority = Arc::new(
                     authority
                         .to_authority(&authority_address, &deployment)
                         .await,
                 );
 
+                info!("JEB::building readyset-server instance - create server handle");
                 builder
                     .start_with_readers(
                         authority,
@@ -1003,6 +1011,7 @@ where
                     )
                     .await
             })?;
+            info!("JEB::building readyset-server instance END");
 
             Some(server_handle)
         } else {

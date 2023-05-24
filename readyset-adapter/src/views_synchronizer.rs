@@ -62,7 +62,7 @@ impl ViewsSynchronizer {
     }
 
     async fn poll(&mut self) {
-        debug!("Views synchronizer polling");
+        debug!("Views synchronizer polling HEAD");
         let queries = self
             .query_status_cache
             .pending_migration()

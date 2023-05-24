@@ -699,19 +699,23 @@ impl NoriaAdapter {
         // hack project.
 
         // Load the replication offset for all tables and the schema from ReadySet
+        info!("JEB::NoriaAdapter::start_inner_mongodb() - HEAD");
         let replication_offsets = noria.replication_offsets().await?;
+        info!("JEB::NoriaAdapter::start_inner_mongodb() - replication_offsets: {:?}", replication_offsets);
 
         let table_filter = TableFilter::try_new(
             nom_sql::Dialect::MongoDB,
             config.replication_tables.take(),
             client_options.default_database.as_deref(),
         )?;
+        info!("JEB::NoriaAdapter::start_inner_mongodb() - table_filter: {:?}", table_filter);
         let pos: OplogPosition = match replication_offsets.max_offset()? {
             Some(repl_offset) => repl_offset.clone().into(),
             None => OplogPosition { 
                 timestamp: bson::Timestamp { time: 0, increment: 0  } 
             }
         };
+        info!("JEB::NoriaAdapter::start_inner_mongodb() - pos max: {:?}", pos);
 
         let connector = Box::new(
             MongoDbOplogConnector::connect(
@@ -893,6 +897,7 @@ impl NoriaAdapter {
         txid: Option<u64>,
         pos: ReplicationOffset,
     ) -> ReadySetResult<()> {
+        info!("JEB::NoriaAdapter,handle_table_actions() HEAD: table: {:?}", &table);
         // Send the rows as are
         let table_mutator = if let Some(table) = self.mutator_for_table(&table).await? {
             table
@@ -1032,7 +1037,7 @@ impl NoriaAdapter {
                 Err(e) => return Err(e),
             };
             *position = pos.clone();
-            debug!(%position, "Received replication action");
+            info!(%position, "Received replication action");
 
             trace!(?action);
 
@@ -1068,6 +1073,7 @@ impl NoriaAdapter {
     /// Get a mutator for a noria table from the cache if available, or fetch a new one
     /// from the controller and cache it. Returns None if the table doesn't exist in noria.
     async fn mutator_for_table(&mut self, name: &Relation) -> ReadySetResult<Option<&mut Table>> {
+        info!("JEB::NoriaAdapter,mutator_for_table() HEAD");
         match self.mutator_map.raw_entry_mut().from_key(name) {
             hash_map::RawEntryMut::Occupied(o) => Ok(o.into_mut().as_mut()),
             hash_map::RawEntryMut::Vacant(v) => match self.noria.table(name.clone()).await {

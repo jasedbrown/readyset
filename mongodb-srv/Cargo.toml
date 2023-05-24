@@ -1,0 +1,35 @@
+[package]
+name = "mongodb-srv"
+version = "0.1.1"
+publish = false
+authors = ["ReadySet Technology, Inc. <info@readyset.io>"]
+edition = "2021"
+
+description = "Bindings for emulating a MongoDB server"
+readme = "README.md"
+
+keywords = ["api-bindings", "database", "sql", "mock", "document-db"]
+categories = ["api-bindings", "network-programming", "database-implementations"]
+
+[dependencies]
+nom = "7.1"
+mongodb = { workspace = true }
+byteorder = "1"
+chrono = "0.4"
+time = "0.3"
+getrandom = "0.2.2"
+async-trait = "0.1"
+tokio = { workspace = true, features = ["full"] }
+thiserror = "1.0.26"
+sha-1 = "0.10.0"
+tracing = "0.1.35"
+readyset-data = { path = "../readyset-data" }
+
+[dev-dependencies]
+tokio-postgres = { workspace = true }
+#mysql = "23.0.1"
+
+slab = "0.4.2"
+futures = "0.3"
+
+test-utils = { path = "../test-utils" }

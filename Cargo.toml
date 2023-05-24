@@ -20,6 +20,7 @@ members = [
     "health-reporter",
     "merging-interval-tree",
     "metrics-aggregator",
+    "mongodb-srv",
     "mysql-srv",
     "mysql-time",
     "nom-sql",

@@ -1,7 +1,7 @@
 use core::time::Duration;
 
 use async_trait::async_trait;
-use mongodb::bson::Bson;
+use mongodb::bson::{Bson, Timestamp};
 use mongodb::Client;
 use mongodb::bson::Document;
 use mongodb::change_stream::ChangeStream;
@@ -18,6 +18,7 @@ use crate::noria_adapter::{Connector, ReplicationAction};
 
 /// A connector that connectst to a MongoDB replset (targeting the primary)
 /// /// and tails the oplog from a given position.
+#[derive(Debug)]
 pub(crate) struct MongoDbOplogConnector {
     /// Client instance that maintains the connections to the backing mongodb replset.
     client: mongodb::Client,
@@ -34,7 +35,7 @@ pub(crate) struct MongoDbOplogConnector {
     change_stream_options: ChangeStreamOptions,
 
     /// If we just want to continue reading the binlog from a previous point
-    next_position: OplogPosition,
+    last_read_position: OplogPosition,
     /// Whether to log statements received by the connector
     enable_statement_logging: bool,
 }
@@ -45,21 +46,22 @@ impl MongoDbOplogConnector {
         next_position: OplogPosition,
         enable_statement_logging: bool
     ) -> ReadySetResult<Self> {
+        info!("JEB::MongoDbOplogConnector::connect() - 1");
         let client = Client::with_options(client_options)?;
 
         let change_stream_options = ChangeStreamOptions::builder()
             .batch_size(Some(16 as u32))                     // sure, 16 seems like a fine batch size :shrug:
             .start_at_operation_time(Some(next_position.timestamp.clone()))
-            .max_await_time(Some(Duration::new(1, 0))) // one second? not sure if this drops the stream or just returns from blocking...
+            .max_await_time(Some(Duration::new(10, 0))) // one second? not sure if this drops the stream or just returns from blocking...
             .read_concern(Some(ReadConcern::MAJORITY))
             .selection_criteria(Some(SelectionCriteria::ReadPreference(ReadPreference::Primary)))
             .build();
 
         let connector = MongoDbOplogConnector {
-            client: client,
+            client: client.clone(),
             // change_stream: Arc::new(Mutex::new(change_stream)),
             change_stream_options,
-            next_position: next_position,
+            last_read_position: next_position,
             enable_statement_logging: enable_statement_logging,
         };
         Ok(connector)
@@ -69,16 +71,24 @@ impl MongoDbOplogConnector {
         &mut self, 
         until: Option<&ReplicationOffset>
     ) -> mongodb::error::Result<(ReplicationAction, &OplogPosition)> {
+        info!("JEB::MongoDbOplogConnector.next_action_inner() - 1");
 
         // TODO(jeb) should only create the change stream once, in connect(). See notes in MongoDbOplogConnector struct.
-        let mut change_stream: ChangeStream<ChangeStreamEvent<Document>> = self.client.watch(None, self.change_stream_options.clone()).await?;
+        let follwing_timestamp = Timestamp { 
+            time: self.last_read_position.timestamp.time,
+            increment: self.last_read_position.timestamp.increment + 1,
+        };
+        let mut cso = self.change_stream_options.clone();
+        cso.start_at_operation_time = Some(follwing_timestamp);
+        let mut change_stream: ChangeStream<ChangeStreamEvent<Document>> = self.client.watch(None, cso).await?;
 
         loop {
             if let Some(event) = change_stream.next_if_any().await? {
+                info!("JEB::MongoDbOplogConnector.next_action_inner() - next event: {:?}", &event);
                 let timestamp = event.cluster_time.ok_or_else(|| {
                     mongodb::error::Error::custom(Box::new(internal_err!("couldn't get the clusterTimestamp of the event")))
                 })?;
-                self.next_position = OplogPosition { timestamp };
+                self.last_read_position = OplogPosition { timestamp };
 
                 if self.enable_statement_logging {
                     info!(target: "replicator_statement", "{:?}", event);
@@ -114,7 +124,7 @@ impl MongoDbOplogConnector {
                                 actions: inserted_docs,
                                 txid: Some(0), // TODO(jeb) fix this
                             },
-                            &self.next_position,
+                            &self.last_read_position,
                         ));
                     },
                     Update => {
@@ -147,14 +157,16 @@ impl MongoDbOplogConnector {
                 }
 
                 // Ok((entry, &self.next_position))
+            } else {
+                info!("JEB::MongoDbOplogConnector.next_action_inner() - recieved no event");
             }
 
             // We didn't get an actionable event, but we still need to check that we haven't reached
             // the until limit
             if let Some(limit) = until {
                 let limit = OplogPosition::try_from(limit).expect("Valid oplog limit");
-                if self.next_position >= limit {
-                    return Ok((ReplicationAction::LogPosition, &self.next_position));
+                if self.last_read_position >= limit {
+                    return Ok((ReplicationAction::LogPosition, &self.last_read_position));
                 }
             }
         }
@@ -169,6 +181,7 @@ fn oplog_doc_to_noria_row(
     
     // assumming no nested/sub documents, keep life simple
     for item in doc.iter() {
+        info!("JEB::oplog_doc_to_noria_row() - next element in bson {:?}", &item);
         let _key = item.0;
         let val = item.1;
         match val {
@@ -178,7 +191,7 @@ fn oplog_doc_to_noria_row(
             Bson::Boolean(v) => inserted_columns.push((*v).try_into().expect("bad bool")),
             Bson::Int32(v) => inserted_columns.push((*v).try_into().expect("bad i32")),
             Bson::Int64(v) => inserted_columns.push((*v).try_into().expect("bad i64")),
-            Bson::ObjectId(_v) => panic!("handle me"),
+            Bson::ObjectId(oid) => inserted_columns.push(oid.to_hex().try_into().expect("bad i64")),
             Bson::DateTime(_v) => panic!("handle me"),
             _ => panic!("handle me"),
         };

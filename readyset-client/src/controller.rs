@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use tower::buffer::Buffer;
 use tower::ServiceExt;
 use tower_service::Service;
-use tracing::trace;
+use tracing::{trace, info};
 use url::Url;
 
 use crate::consensus::{Authority, AuthorityControl};
@@ -464,18 +464,22 @@ impl ReadySetHandle {
     where
         N: Into<Relation>,
     {
+        info!("JEB::ReadySetHandle.table() HEAD");
         let name = name.into();
         async move {
+            info!("JEB::ReadySetHandle.table() async head");
             self.request_table(ControllerRequest::new(
                 "table_builder",
                 &name,
                 self.request_timeout,
             )?)
             .await?
-            .ok_or_else(|| ReadySetError::TableNotFound {
+            .ok_or_else(|| {
+                info!("JEB::ReadySetHandle.table() ELSE");
+                ReadySetError::TableNotFound {
                 name: name.name.clone().into(),
                 schema: name.schema.clone().map(Into::into),
-            })
+            }})
         }
     }
 
@@ -497,8 +501,11 @@ impl ReadySetHandle {
         &mut self,
         req: ControllerRequest,
     ) -> impl Future<Output = ReadySetResult<Option<Table>>> + '_ {
+        info!("JEB::ReadySetHandle.request_table() HEAD");
+        
         let domains = self.domains.clone();
         async move {
+            info!("JEB::ReadySetHandle.request_table() BEFORE CALL");
             let body: hyper::body::Bytes = self
                 .handle
                 .ready()
@@ -507,10 +514,14 @@ impl ReadySetHandle {
                 .call(req)
                 .await
                 .map_err(rpc_err!("ReadySetHandle::table"))?;
+            info!("JEB::ReadySetHandle.request_table() AFTER CALL");
 
             Ok(
                 bincode::deserialize::<ReadySetResult<Option<TableBuilder>>>(&body)?
-                    .map_err(|e| rpc_err_no_downcast("ReadySetHandle::table", e))?
+                    .map_err(|e| {
+                        info!("JEB::ReadySetHandle.request_table() deser error: {:?}", &e);
+
+                        rpc_err_no_downcast("ReadySetHandle::table", e) })?
                     .map(|tb| tb.build(domains)),
             )
         }

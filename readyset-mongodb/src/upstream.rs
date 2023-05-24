@@ -7,7 +7,7 @@ use readyset_adapter::upstream_database::UpstreamDestination;
 use readyset_client_metrics::QueryDestination;
 use readyset_data::DfValue;
 use readyset_errors::{unsupported_err, ReadySetError};
-// use tracing::info_span;
+use tracing::info;
 
 use crate::Error;
 
@@ -37,7 +37,7 @@ impl UpstreamDestination for QueryResult {
 
 // A connector to the underlying mongodb instance/replset.
 pub struct MongoDbUpstream {
-    client: Client,
+    _client: Client,
     upstream_config: UpstreamConfig,
 }
 
@@ -69,6 +69,7 @@ impl UpstreamDatabase for MongoDbUpstream {
             .as_deref()
             .ok_or(ReadySetError::InvalidUpstreamDatabase)?;
 
+
         // options to driver
         let mut client_options = ClientOptions::parse(url).await?;
         client_options.app_name = Some("readyset".to_string());
@@ -86,13 +87,15 @@ impl UpstreamDatabase for MongoDbUpstream {
 
         // actually connect to Mongo here. fwiw, there's no async connect function 
         // on Client that also takes a client_options struct :shrug:
+
         let client = Client::with_options(client_options)?;
+        info!("MongoDbUpstream::connect() - connected to Client, url: {}", &url);
 
         // span.in_scope(|| info!("Established connection to upstream"));
 
         // TODO(jeb) we could (should?) check for a minimum mongo version here ...
 
-        Ok(Self{ client, upstream_config })
+        Ok(Self{ _client: client, upstream_config: upstream_config })
     }
 
     async fn reset(&mut self) -> Result<(), Self::Error> {
@@ -178,7 +181,8 @@ impl UpstreamDatabase for MongoDbUpstream {
     }
 
     async fn schema_search_path(&mut self) -> Result<Vec<SqlIdentifier>, Self::Error> {
-        panic!("not yet")
+        // naively doing what the mysql upstream does :shrug:
+        Ok(self.database().into_iter().map(|s| s.into()).collect())
     }
 
 }
